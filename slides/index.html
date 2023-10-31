@@ -87,11 +87,21 @@
 					- Mount (Dateisystem/Mounts)
 					- Network (Netzwerk-Interfaces)
 					- PID (Prozess-IDs)
-					- IPC Interprozess-Kommunikation
+					- IPC (Interprozess-Kommunikation)
 					- UTS (Hostname)
 					- User (User-IDs)
 					- (Cgroup) (Control Groups)
 					- (Time) (Monotone Systemzeit)
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## User-Namespaces
+					```sh
+					$ cat /etc/subuid
+					neocturne:100000:65536
+					$ cat /etc/subgid
+					neocturne:100000:65536
+
+					```
 				</textarea></section>
 				<section data-markdown><textarea data-template>
 					```sh
@@ -99,6 +109,13 @@
 						--map-root-user --map-users=auto --map-groups=auto
 						--mount --net --ipc --pid --uts --fork \
 						sh -ec '…'
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					```text
+					ip a
+					1: lo: <LOOPBACK> mtu 65536 qdisc noop state DOWN …
+					    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
 					```
 				</textarea></section>
 				<section data-markdown><textarea data-template>
@@ -203,7 +220,7 @@
 					pivot_root . tmp
 					cd /
 
-					exec env -i - "${ENV}" sh -ec "
+					exec /usr/bin/env -i - "${ENV}" /bin/sh -ec "
 						umount -l /tmp
 						exec ${CMD}
 					"
@@ -233,13 +250,6 @@
 					  |-/dev/tty     dev[/tty]     devtmpfs …
 					  |-/dev/pts     devpts        devpts   …
 					  `-/dev/shm     tmpfs         tmpfs    …
-					```
-				</textarea></section>
-				<section data-markdown><textarea data-template>
-					```text
-					# ip a
-					1: lo: <LOOPBACK> mtu 65536 qdisc noop state DOWN …
-					    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
 					```
 				</textarea></section>
 			</div>

@@ -4,20 +4,244 @@
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-		<title>reveal.js</title>
+		<title>Docker ade • neocturne • NooK 2023</title>
 
 		<link rel="stylesheet" href="dist/reset.css">
 		<link rel="stylesheet" href="dist/reveal.css">
-		<link rel="stylesheet" href="dist/theme/black.css">
+		<link rel="stylesheet" href="dist/theme/dracula.css">
 
 		<!-- Theme used for syntax highlighted code -->
 		<link rel="stylesheet" href="plugin/highlight/monokai.css">
+
+		<link rel="stylesheet" href="plugin/title-footer/title-footer.css">
+
+		<style>
+			:root {
+				--r-heading2-size: 1.5em;
+			}
+			.reveal pre code {
+				max-height: 450px;
+			}
+		</style>
 	</head>
 	<body>
 		<div class="reveal">
 			<div class="slides">
-				<section>Slide 1</section>
-				<section>Slide 2</section>
+				<section data-markdown data-state="no-title-footer"><textarea data-template>
+					# Docker ade
+					## Eine schlechte Container-Runtime in 10 Minuten
+
+					<small>von neocturne • NooK 2023</small>
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## Problemstellung
+					- Ein Docker-Image starten
+					- Ohne Container-Runtime
+					- Nur mit Debian-Bordmitteln
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## Die Lösung
+					- "Sillycon" - Silly Container Runtime
+					- ~75 Zeilen Shellscript
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## Speichern eines Docker-Images
+					```sh
+					$ docker image save -o image.tar my-image
+					```
+
+					```text
+					$ tar tf image.tar
+					24bf8008…5cbe26ed/
+					24bf8008…5cbe26ed/VERSION
+					24bf8008…5cbe26ed/json
+					24bf8008…5cbe26ed/layer.tar
+					6a3253cd…c3558d57/
+					6a3253cd…c3558d57/VERSION
+					6a3253cd…c3558d57/json
+					6a3253cd…c3558d57/layer.tar
+					929c0ba6…b82b58f1.json
+					manifest.json
+					repositories
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## manifest.json
+					```json
+					[
+						{
+							"Config": "929c0ba6…b82b58f1.json",
+							"RepoTags": [
+								"my-image:latest"
+							],
+							"Layers": [
+								"6a3253cd…c3558d57/layer.tar",
+								"24bf8008…5cbe26ed/layer.tar"
+							]
+						}
+					]
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## Namespaces
+					- Mount (Dateisystem/Mounts)
+					- Network (Netzwerk-Interfaces)
+					- PID (Prozess-IDs)
+					- IPC Interprozess-Kommunikation
+					- UTS (Hostname)
+					- User (User-IDs)
+					- (Cgroup) (Control Groups)
+					- (Time) (Monotone Systemzeit)
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					```sh
+					unshare \
+						--map-root-user --map-users=auto --map-groups=auto
+						--mount --net --ipc --pid --uts --fork \
+						sh -ec '…'
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					```sh
+					mount -t tmpfs work "${WORKDIR}"
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## config.sh
+					```sh
+					LAYERS='
+						6a3253cd…c3558d57/layer.tar
+						24bf8008…5cbe26ed/layer.tar
+					'
+
+					CMD='bash'
+					ENV='PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:…'
+					HOSTNAME='sillycon'
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## Entpacken der Layer-Archive
+					```sh
+					i=0
+					lowerdir=
+					sep=
+					for layer in ${LAYERS}; do
+						mkdir "${WORKDIR}/layer${i}"
+						tar -C "${WORKDIR}/layer${i}" -xf "${DIR}/${layer}"
+						lowerdir="${WORKDIR}/layer${i}${sep}${lowerdir}"
+						sep=:
+						i=$((i+1))
+					done
+					```
+
+					`lowerdir=${WORKDIR}/layer1:${WORKDIR}/layer0`
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## Overlay-Mount für rootfs
+					```sh
+					mkdir "${WORKDIR}/upper" "${WORKDIR}/work" "${WORKDIR}/root"
+
+					mount -t overlay -o\
+					lowerdir="${lowerdir}",\
+					upperdir="${WORKDIR}/upper",\
+					workdir="${WORKDIR}/work" \
+						root "${WORKDIR}/root"
+
+					cd "${WORKDIR}/root"
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## Essentielle Mounts
+					```sh
+					mount -t proc -o nosuid,nodev,noexec proc proc
+					mount -t sysfs -o nosuid,nodev,noexec sys sys
+					mount -t tmpfs -o nosuid,nodev,mode=755 run run
+					mount -t tmpfs -o nosuid,nodev tmp tmp
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## Setup für `/dev`: Devices
+					```sh
+					mount -t tmpfs -o nosuid dev dev
+
+					for file in null zero full random urandom tty; do
+						touch "dev/${file}"
+						mount --bind "/dev/${file}" "dev/${file}"
+					done
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## Setup für `/dev`: Mounts
+					```sh
+					# Pseudoterminals
+					mkdir dev/pts
+					mount -t devpts -o nosuid,noexec devpts dev/pts
+
+					# Shared Memory
+					mkdir dev/shm
+					mount -t tmpfs -o nosuid,nodev tmpfs dev/shm
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## Setup für `/dev`: Symlinks
+					```sh
+					ln -s /proc/self/fd dev/fd
+					ln -s /proc/self/fd/0 dev/stdin
+					ln -s /proc/self/fd/1 dev/stdout
+					ln -s /proc/self/fd/2 dev/stderr
+					ln -s pts/ptmx dev/ptmx
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					## Hostname
+					```sh
+					hostname "${HOSTNAME}"
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					```sh
+					pivot_root . tmp
+					cd /
+
+					exec env -i - "${ENV}" sh -ec "
+						umount -l /tmp
+						exec ${CMD}
+					"
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					```text
+					$ ./sillycon
+					root@sillycon:/#
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					```text
+					# findmnt
+					TARGET           SOURCE        FSTYPE   OPTIONS
+					/                root          overlay  …
+					|-/proc          proc          proc     …
+					|-/sys           sys           sysfs    …
+					|-/run           run           tmpfs    …
+					|-/tmp           tmp           tmpfs    …
+					`-/dev           dev           tmpfs    …
+					  |-/dev/null    dev[/null]    devtmpfs …
+					  |-/dev/zero    dev[/zero]    devtmpfs …
+					  |-/dev/full    dev[/full]    devtmpfs …
+					  |-/dev/random  dev[/random]  devtmpfs …
+					  |-/dev/urandom dev[/urandom] devtmpfs …
+					  |-/dev/tty     dev[/tty]     devtmpfs …
+					  |-/dev/pts     devpts        devpts   …
+					  `-/dev/shm     tmpfs         tmpfs    …
+					```
+				</textarea></section>
+				<section data-markdown><textarea data-template>
+					```text
+					# ip a
+					1: lo: <LOOPBACK> mtu 65536 qdisc noop state DOWN …
+					    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+					```
+				</textarea></section>
 			</div>
 		</div>
 
@@ -31,9 +255,17 @@
 			// - https://revealjs.com/config/
 			Reveal.initialize({
 				hash: true,
+				transition: 'none',
+				backgroundTransition: 'none',
 
 				// Learn about plugins: https://revealjs.com/plugins/
-				plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ]
+				plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ],
+
+				dependencies: [
+					{ src: 'plugin/title-footer/title-footer.js', async: true, callback: function() {
+						title_footer.initialize('Docker ade   •   neocturne   •   NooK 2023');
+					} }
+				],
 			});
 		</script>
 	</body>
